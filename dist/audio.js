@@ -9,7 +9,7 @@ export class LoaderAudio {
       const slider=document.getElementById(id);slider.value=Math.round(this[key]*100);document.getElementById(out).textContent=slider.value+'%';
       slider.addEventListener('input',()=>{this[key]=+slider.value/100;document.getElementById(out).textContent=slider.value+'%';this.applyVolumes();try{localStorage.setItem('loader-audio-volumes',JSON.stringify({music:this.musicVolume,effects:this.effectsVolume}));}catch{}});
     }
-    this.button.addEventListener('click',()=>this.toggle());
+    this.button.addEventListener('click',()=>this.toggle());document.getElementById('headerAudioToggle')?.addEventListener('click',()=>this.toggle());
     document.addEventListener('visibilitychange',()=>{if(!this.ctx)return;if(document.hidden){this.ctx.suspend();}else if(this.enabled){this.ctx.resume().then(()=>{this.nextBeat=this.ctx.currentTime+.07;this.paint();}).catch(()=>this.paint('소리 켜기를 다시 눌러 주세요'));}this.paint();});
   }
   async toggle(){
@@ -30,7 +30,7 @@ export class LoaderAudio {
     this.timer=setInterval(()=>this.schedule(),80);
   }
   applyVolumes(){if(!this.ctx)return;this.musicBus.gain.setTargetAtTime(this.musicVolume,this.ctx.currentTime,.04);this.effectsBus.gain.setTargetAtTime(this.effectsVolume,this.ctx.currentTime,.04);}
-  paint(error){this.button.textContent=this.enabled?'🔇 소리 끄기':'♫ 소리 켜기';this.button.setAttribute('aria-pressed',String(this.enabled));document.getElementById('audioStatus').textContent=error||(this.enabled?(document.hidden?'다른 화면에서는 자동 일시정지':'배경음과 동작 효과음 재생 중'):'소리 켜기를 누르면 음악과 효과음이 시작됩니다.');}
+  paint(error){this.button.textContent=this.enabled?'🔇 소리 끄기':'♫ 소리 켜기';this.button.setAttribute('aria-pressed',String(this.enabled));const quick=document.getElementById('headerAudioToggle');if(quick){quick.textContent=this.enabled?'🔇 소리 끄기':'♫ 소리 켜기';quick.setAttribute('aria-label',this.enabled?'소리 끄기':'소리 켜기');quick.setAttribute('aria-pressed',String(this.enabled));}document.getElementById('audioStatus').textContent=error||(this.enabled?(document.hidden?'다른 화면에서는 자동 일시정지':'배경음과 동작 효과음 재생 중'):'소리 켜기를 누르면 음악과 효과음이 시작됩니다.');}
   note(freq,duration,volume,bus,type='sine',delay=0){if(!this.ctx||!this.enabled&&bus!==this.effectsBus)return;const c=this.ctx,t=c.currentTime+delay,o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(Math.max(.0002,volume),t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+duration);o.connect(g);g.connect(bus);o.start(t);o.stop(t+duration+.03);o.onended=()=>{o.disconnect();g.disconnect();};}
   schedule(){if(!this.enabled||!this.ctx||this.ctx.state!=='running'||document.hidden)return;const c=this.ctx;if(this.nextBeat<c.currentTime-.3)this.nextBeat=c.currentTime+.04;
     // 112 BPM, original playful pentatonic melody with walking bass and light percussion.
