@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.js';
-import { LoaderAudio } from './audio.js';
+import { LoaderAudio } from './audio.js?v=20261025-audio3';
 const sound=new LoaderAudio();
 import { SVGRenderer } from './vendor/SVGRenderer.js';
 const $=id=>document.getElementById(id),canvas=$('scene');
@@ -52,7 +52,7 @@ $('auto').onclick=()=>{if(auto){cancelAuto();message('자동 시연을 멈췄습
 for(const b of document.querySelectorAll('[data-view]'))b.onclick=()=>{mode=b.dataset.view;document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('selected',x===b));};
 $('fullscreen').onclick=async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen();}catch{message('이 브라우저에서는 전체 화면이 지원되지 않습니다.')}};
 const aliases={ArrowUp:'w',ArrowDown:'s',ArrowLeft:'a',ArrowRight:'d',' ':'space'};
-window.addEventListener('keydown',e=>{if(e.target.matches('input,summary'))return;const k=aliases[e.key]||e.key.toLowerCase();if(['w','a','s','d','q','e','r','f','space'].includes(k)){e.preventDefault();if(k==='space'){if(!e.repeat)action();return;}if(auto)cancelAuto();keys.add(k);}});window.addEventListener('keyup',e=>keys.delete(aliases[e.key]||e.key.toLowerCase()));window.addEventListener('blur',clearKeys);document.addEventListener('visibilitychange',clearKeys);
+window.addEventListener('keydown',e=>{if(e.target.matches('input,summary'))return;if((e.key===' '||e.key==='Enter')&&e.target.closest('button'))return;const k=aliases[e.key]||e.key.toLowerCase();if(['w','a','s','d','q','e','r','f','space'].includes(k)){e.preventDefault();if(k==='space'){if(!e.repeat)action();return;}if(auto)cancelAuto();keys.add(k);}});window.addEventListener('keyup',e=>keys.delete(aliases[e.key]||e.key.toLowerCase()));window.addEventListener('blur',clearKeys);document.addEventListener('visibilitychange',clearKeys);
 for(const b of document.querySelectorAll('[data-key]')){b.onpointerdown=e=>{e.preventDefault();cancelAuto();b.setPointerCapture(e.pointerId);keys.add(b.dataset.key);b.classList.add('held');};const release=()=>{keys.delete(b.dataset.key);b.classList.remove('held')};b.onpointerup=release;b.onpointercancel=release;b.onlostpointercapture=release;}
 const clampZoom=v=>THREE.MathUtils.clamp(v,5,30);
 $('zoomIn').onclick=()=>distance=clampZoom(distance-2);$('zoomOut').onclick=()=>distance=clampZoom(distance+2);
