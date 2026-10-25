@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.js';
-import { LoaderAudio } from './audio.js?v=20261025-audio3';
+import { LoaderAudio } from './audio.js?v=20261025-sampled4';
 const sound=new LoaderAudio();
 import { SVGRenderer } from './vendor/SVGRenderer.js';
 const $=id=>document.getElementById(id),canvas=$('scene');

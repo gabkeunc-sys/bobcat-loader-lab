@@ -1,4 +1,4 @@
-// Original procedural music and effects. No network audio or third-party recordings.
+// Locally hosted, licensed music and sampled machinery/ground effects. See audio/CREDITS.md.
 export class LoaderAudio {
   constructor(){
     this.ctx=null;this.enabled=true;this.operation=0;this.step=0;this.nextBeat=0;this.previous={lift:0,tilt:0,load:0,cycles:0};this.reverseAt=0;
@@ -44,7 +44,7 @@ export class LoaderAudio {
       if(this.ctx.state!=='running')throw Error('audio not running');
       if(document.hidden){this.paint();return;}
       this.setMaster(true);this.nextBeat=this.ctx.currentTime+.09;this.paint();
-      this.note(165,.12,.16,this.effectsBus,'triangle');this.note(220,.2,.12,this.effectsBus,'triangle',.12);
+      this.loadSamples().then(()=>{if(this.enabled&&this.ctx.state==='running'){this.ensureLoops();this.paint();}}).catch(()=>this.paint('음원을 불러오지 못했습니다. 새로고침해 주세요.'));
     }catch{
       if(operation!==this.operation)return;
       this.setMaster(false);if(automatic){this.paint('자동재생 대기 중 · 화면을 터치하거나 조작하면 소리가 시작됩니다.');}else{this.enabled=false;this.paint('소리를 시작하지 못했습니다. 소리 재생을 다시 눌러 주세요.');}
@@ -55,32 +55,41 @@ export class LoaderAudio {
     const limiter=c.createDynamicsCompressor();limiter.threshold.value=-12;limiter.ratio.value=8;limiter.connect(c.destination);
     this.master=c.createGain();this.master.gain.value=0;this.master.connect(limiter);
     this.musicBus=c.createGain();this.musicBus.connect(this.master);this.effectsBus=c.createGain();this.effectsBus.connect(this.master);this.applyVolumes();
-    this.engineGain=c.createGain();this.engineGain.gain.value=0;const filter=c.createBiquadFilter();filter.type='lowpass';filter.frequency.value=350;this.engineGain.connect(filter);filter.connect(this.effectsBus);
-    this.engine=c.createOscillator();this.engine.type='sawtooth';this.engine.frequency.value=45;this.engine.connect(this.engineGain);this.engine.start();
-    this.hydraulic=c.createOscillator();this.hydraulic.type='triangle';this.hydraulic.frequency.value=260;this.hydraulicGain=c.createGain();this.hydraulicGain.gain.value=0;this.hydraulic.connect(this.hydraulicGain);this.hydraulicGain.connect(this.effectsBus);this.hydraulic.start();
-    this.noise=c.createBuffer(1,c.sampleRate*1.1,c.sampleRate);const a=this.noise.getChannelData(0);for(let i=0;i<a.length;i++)a[i]=Math.random()*2-1;
-    this.timer=setInterval(()=>this.schedule(),80);
+    this.buffers={};this.loops={};
+    this.loadSamples().catch(()=>{});
   }
-  applyVolumes(){if(!this.ctx)return;this.musicBus.gain.setTargetAtTime(this.musicVolume,this.ctx.currentTime,.04);this.effectsBus.gain.setTargetAtTime(this.effectsVolume,this.ctx.currentTime,.04);}
-  paint(error){const pending=this.enabled&&(!this.ctx||this.ctx.state!=='running');this.button.textContent=this.enabled?'🔇 전체 음소거':'♫ 소리 재생';this.button.setAttribute('aria-pressed',String(this.enabled));const quick=document.getElementById('headerAudioToggle');if(quick){quick.textContent=this.enabled?'🔇 음소거':'♫ 소리 재생';quick.setAttribute('aria-label',this.enabled?'음소거':'소리 재생');quick.setAttribute('aria-pressed',String(this.enabled));}document.getElementById('audioStatus').textContent=error||(this.enabled?(document.hidden?'다른 화면에서는 자동 일시정지':pending?'자동재생 대기 · 화면을 터치하면 시작됩니다.':'배경음과 동작 효과음 재생 중'):'음소거 상태입니다. 소리 재생을 누르면 다시 재생됩니다.');}
-  note(freq,duration,volume,bus,type='sine',delay=0){if(!this.ctx||!this.enabled)return;const c=this.ctx,t=c.currentTime+delay,o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(Math.max(.0002,volume),t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+duration);o.connect(g);g.connect(bus);o.start(t);o.stop(t+duration+.03);o.onended=()=>{o.disconnect();g.disconnect();};}
-  schedule(){if(!this.enabled||!this.ctx||this.ctx.state!=='running'||document.hidden)return;const c=this.ctx;if(this.nextBeat<c.currentTime-.3)this.nextBeat=c.currentTime+.04;
-    // 112 BPM, original playful pentatonic melody with walking bass and light percussion.
-    const melody=[72,null,76,79,76,74,72,null,67,72,74,76,79,null,76,74,72,null,76,79,81,79,76,null,74,72,69,67,69,72,null,null];
-    const bass=[48,48,53,53,55,55,48,55];
-    while(this.nextBeat<c.currentTime+.18){const delay=Math.max(0,this.nextBeat-c.currentTime),s=this.step%32;
-      if(melody[s])this.note(440*2**((melody[s]-69)/12),.16,.11,this.musicBus,'triangle',delay);
-      if(s%2===0)this.note(440*2**((bass[Math.floor(s/4)]-69)/12),.28,.17,this.musicBus,'sine',delay);
-      if(s%4===0)this.kick(delay);else if(s%2===1)this.noiseBurst(.025,.018,this.musicBus,delay,5000);
-      this.step++;this.nextBeat+=60/112/2;
+  loadSamples(){
+    if(this.loading)return this.loading;
+    this.loading=Promise.all(['music','engine','hydraulic','gravel'].map(async name=>{
+      const response=await fetch(new URL(`audio/${name}.mp3`,import.meta.url));
+      if(!response.ok)throw Error(`Missing ${name}`);
+      this.buffers[name]=await this.ctx.decodeAudioData(await response.arrayBuffer());
+    })).catch(error=>{this.loading=null;throw error;});
+    return this.loading;
+  }
+  ensureLoops(){
+    for(const [name,bus,volume] of [['music',this.musicBus,.8],['engine',this.effectsBus,.12],['hydraulic',this.effectsBus,0]]){
+      if(this.loops[name]||!this.buffers[name])continue;
+      const source=this.ctx.createBufferSource(),gain=this.ctx.createGain();source.buffer=this.buffers[name];source.loop=true;
+      gain.gain.value=volume;source.connect(gain);gain.connect(bus);source.start();this.loops[name]={source,gain};
     }
   }
-  kick(delay){const c=this.ctx,t=c.currentTime+delay,o=c.createOscillator(),g=c.createGain();o.frequency.setValueAtTime(115,t);o.frequency.exponentialRampToValueAtTime(42,t+.1);g.gain.setValueAtTime(.12,t);g.gain.exponentialRampToValueAtTime(.0001,t+.13);o.connect(g);g.connect(this.musicBus);o.start(t);o.stop(t+.15);o.onended=()=>{o.disconnect();g.disconnect();};}
-  noiseBurst(duration,volume,bus,delay=0,cutoff=1300){const c=this.ctx,t=c.currentTime+delay,s=c.createBufferSource(),f=c.createBiquadFilter(),g=c.createGain();s.buffer=this.noise;f.type='lowpass';f.frequency.value=cutoff;g.gain.setValueAtTime(volume,t);g.gain.exponentialRampToValueAtTime(.0001,t+duration);s.connect(f);f.connect(g);g.connect(bus);s.start(t);s.stop(t+duration+.03);s.onended=()=>{s.disconnect();f.disconnect();g.disconnect();};}
+  sample(name,volume=1,rate=1,delay=0){
+    if(!this.buffers[name]||!this.enabled)return;
+    const source=this.ctx.createBufferSource(),gain=this.ctx.createGain();source.buffer=this.buffers[name];source.playbackRate.value=rate;
+    gain.gain.value=volume;source.connect(gain);gain.connect(this.effectsBus);source.start(this.ctx.currentTime+delay);
+    source.onended=()=>{source.disconnect();gain.disconnect();};
+  }
+
+  applyVolumes(){if(!this.ctx)return;this.musicBus.gain.setTargetAtTime(this.musicVolume,this.ctx.currentTime,.04);this.effectsBus.gain.setTargetAtTime(this.effectsVolume,this.ctx.currentTime,.04);}
+  paint(error){const pending=this.enabled&&(!this.ctx||this.ctx.state!=='running');this.button.textContent=this.enabled?'🔇 전체 음소거':'♫ 소리 재생';this.button.setAttribute('aria-pressed',String(this.enabled));const quick=document.getElementById('headerAudioToggle');if(quick){quick.textContent=this.enabled?'🔇 음소거':'♫ 소리 재생';quick.setAttribute('aria-label',this.enabled?'음소거':'소리 재생');quick.setAttribute('aria-pressed',String(this.enabled));}document.getElementById('audioStatus').textContent=error||(this.enabled?(document.hidden?'다른 화면에서는 자동 일시정지':pending?'자동재생 대기 · 화면을 터치하면 시작됩니다.':!this.loops?.music?'음원 불러오는 중…':'Carefree · 배경음과 장비 효과음 재생 중'):'음소거 상태입니다. 소리 재생을 누르면 다시 재생됩니다.');}
+  note(freq,duration,volume,bus,type='sine',delay=0){if(!this.ctx||!this.enabled)return;const c=this.ctx,t=c.currentTime+delay,o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(Math.max(.0002,volume),t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+duration);o.connect(g);g.connect(bus);o.start(t);o.stop(t+duration+.03);o.onended=()=>{o.disconnect();g.disconnect();};}
   update(v){const before=this.previous;this.previous={...v};if(!this.enabled||!this.ctx||this.ctx.state!=='running')return;const c=this.ctx,t=c.currentTime,drive=Math.min(1,Math.max(Math.abs(v.left),Math.abs(v.right))),moving=Math.abs(v.lift-before.lift)>.0001||Math.abs(v.tilt-before.tilt)>.0001;
-    this.engine.frequency.setTargetAtTime(42+drive*48,t,.13);this.engineGain.gain.setTargetAtTime(.018+drive*.055,t,.12);this.hydraulic.frequency.setTargetAtTime(230+v.lift*100,t,.08);this.hydraulicGain.gain.setTargetAtTime(moving?.035:0,t,.06);
-    if(v.speed<-.05&&t>this.reverseAt){this.note(740,.13,.11,this.effectsBus,'sine');this.reverseAt=t+.7;}
-    if(v.load>before.load)this.noiseBurst(.45,.21,this.effectsBus);
-    if(v.cycles>before.cycles){this.noiseBurst(.65,.18,this.effectsBus);[523.25,659.25,783.99,1046.5].forEach((f,i)=>this.note(f,.24,.13,this.effectsBus,'triangle',.15+i*.13));}
+    const engine=this.loops.engine,hydraulic=this.loops.hydraulic;
+    if(engine){engine.source.playbackRate.setTargetAtTime(.78+drive*.58,t,.18);engine.gain.gain.setTargetAtTime(.12+drive*.2,t,.12);}
+    if(hydraulic)hydraulic.gain.gain.setTargetAtTime(moving?.32:0,t,.07);
+    if(v.speed<-.05&&t>this.reverseAt){this.note(740,.13,.08,this.effectsBus,'sine');this.reverseAt=t+.7;}
+    if(v.load>before.load)this.sample('gravel',.8,.8);
+    if(v.cycles>before.cycles){this.sample('gravel',.8,.65);this.sample('gravel',.5,.9,.18);[523.25,659.25,783.99].forEach((f,i)=>this.note(f,.2,.055,this.effectsBus,'sine',.4+i*.12));}
   }
 }
